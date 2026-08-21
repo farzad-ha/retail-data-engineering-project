@@ -1,0 +1,1 @@
+Initial data profiling identified anomalies in the reviews dataset, leading to a deeper investigation into unexpected field values and possible CSV parsing/alignment issues.
