@@ -1,52 +1,73 @@
-Reviews CSV Investigation
+# 🔎 Reviews CSV Investigation
+
+> **Status:** Ongoing  
+> **Dataset:** `olist_order_reviews_dataset.csv`  
+> **Purpose:** Investigate unexpected values discovered during data-quality profiling.
 
 This investigation started as part of the normal data-profiling work on the reviews dataset.
 
-1. Initial NULL profiling
+---
+
+## 1. 🟡 Initial NULL Profiling
 
 The first step was the standard NULL check across the reviews table.
 
-review_id was found to contain 1 NULL value.
+`review_id` was found to contain **1 NULL value**.
 
 Instead of immediately treating this as a simple missing-ID problem, I inspected the affected record.
 
-2. First anomaly discovered
+---
 
-The affected row did not simply contain a missing review_id.
+## 2. 🚨 First Anomaly Discovered
 
-The values appeared to be shifted into the wrong columns. Customer review text was appearing in fields such as order_id and review_score.
+The affected row did not simply contain a missing `review_id`.
+
+The values appeared to be **shifted into the wrong columns**. Customer review text was appearing in fields such as:
+
+- `order_id`
+- `review_score`
 
 For example, text from the customer review appeared where an order ID and review score would normally be expected.
 
 This suggested that there might be a problem with how some records were being parsed.
 
-3. Inspecting the raw CSV
+---
+
+## 3. 🔍 Inspecting the Raw CSV
 
 I then inspected the original CSV as raw text rather than relying only on the parsed Spark DataFrame.
 
 A sample of the suspicious source data showed comma-separated values that appeared to use commas as the field delimiter.
 
-At this point, the initial conclusion was that the problem might simply be a malformed source record rather than a broader parsing problem.
+At this point, the initial conclusion was that the problem might simply be a **malformed source record** rather than a broader parsing problem.
 
-However, this conclusion was made too early because only a small number of raw records had been inspected.
+However, this conclusion was made **too early** because only a small number of raw records had been inspected.
 
-4. Investigating the review_score column
+---
 
-The schema showed that review_score had been read as a string.
+## 4. ⚠️ Investigating the `review_score` Column
 
-Because review_score should contain numeric ratings from 1 to 5, I checked for values that did not match the expected rating format.
+The schema showed that `review_score` had been read as a `string`.
 
-This identified 2,558 records.
+Because `review_score` should contain numeric ratings from **1 to 5**, I checked for values that did not match the expected rating format.
 
-At first, this appeared to capture the customer-review text that had been incorrectly placed into review_score, and it seemed that the problematic records might have been identified.
+### Result
 
-However, this check alone was not sufficient.
+| Check | Records identified |
+|---|---:|
+| Values failing the expected `1–5` review-score format | **2,558** |
 
-It only established that the values in review_score were not valid 1–5 scores. It did not explain the wider parsing problem or identify all affected records.
+At first, this appeared to capture the customer-review text that had been incorrectly placed into `review_score`, and it seemed that the problematic records might have been identified.
 
-5. Strengthening the identifier validation
+However, this check alone was **not sufficient**.
 
-The source IDs appeared to follow a 32-character hexadecimal format.
+It only established that the values in `review_score` were not valid `1–5` scores. It did not explain the wider parsing problem or identify all affected records.
+
+---
+
+## 5. 🧩 Strengthening the Identifier Validation
+
+The source IDs appeared to follow a **32-character hexadecimal format**.
 
 A check based only on length was not sufficient because a value could contain exactly 32 characters without actually being a valid hexadecimal identifier.
 
@@ -54,58 +75,94 @@ For example, a 32-character string containing unrelated text could pass a length
 
 The stronger validation therefore checked both:
 
-exactly 32 characters
+- **Exactly 32 characters**
+- **Every character being a valid hexadecimal character (`0–9` or `A–F`)**
 
-every character being a valid hexadecimal character (0–9 or A–F)
+When this stronger validation was applied to `review_id`, it identified:
 
-When this stronger validation was applied to review_id, it identified 4,937 records that did not conform to the expected format.
+> **4,937 records that did not conform to the expected format.**
 
-This was significantly higher than the 2,558 records previously identified through the review_score check.
+This was significantly higher than the **2,558 records** previously identified through the `review_score` check.
 
-6. Evidence of wider field misalignment
+| Investigation | Records identified |
+|---|---:|
+| Invalid `review_score` format | **2,558** |
+| Invalid `review_id` hexadecimal format | **4,937** |
 
-The affected records were then visually inspected using the Databricks display() function.
+This suggested that the problem was much larger than the original single malformed record.
 
-The inspection showed that the problem was not limited to customer review text appearing in review_score.
+---
 
-The review_id field also contained values such as:
+## 6. 🔬 Evidence of Wider Field Misalignment
 
-timestamps
+The affected records were then visually inspected using the Databricks `display()` function.
 
-customer review text
+The inspection showed that the problem was **not limited to customer review text appearing in `review_score`**.
 
-other data that clearly belonged to different columns
+The `review_id` field also contained values such as:
 
-This indicated that the issue was affecting multiple fields and was therefore likely a broader record-parsing or field-alignment problem.
+- **Timestamps**
+- **Customer review text**
+- **Other data that clearly belonged to different columns**
 
-The 4,937 records should therefore not simply be described as 4,937 invalid IDs. The invalid ID format is evidence that the parsed records are not always aligned with the intended CSV columns.
+This indicated that the issue was affecting multiple fields and was therefore likely a broader **record-parsing or field-alignment problem**.
 
-7. Revised conclusion
+### Important distinction
 
-The initial conclusion that the source CSV itself contained isolated malformed records was too hasty.
+The **4,937 records should not simply be described as 4,937 invalid IDs**.
 
-Inspecting a few raw records showed that commas were being used as delimiters and that some records appeared correctly structured, but that was not enough to establish that the entire file was being parsed correctly.
+The invalid ID format is evidence that the **parsed records are not always aligned with the intended CSV columns**.
+
+---
+
+## 7. 🔄 Revised Conclusion
+
+The initial conclusion that the source CSV contained isolated malformed records was **too hasty**.
+
+Inspecting a few raw records showed that commas were being used as delimiters and that some records appeared correctly structured. However, this was **not enough to establish that the entire file was being parsed correctly**.
 
 The later identifier validation and inspection of thousands of affected records provided stronger evidence that the problem is broader than the single malformed record initially discovered.
 
-8. Current status
+### Current interpretation
 
-The investigation is not yet finished.
+The reviews dataset contains evidence of **widespread field misalignment during CSV ingestion/parsing**, rather than simply a small number of invalid IDs.
+
+---
+
+## 8. 🧭 Current Status
+
+> **Investigation still in progress.**
 
 The next step is to inspect the raw CSV more deeply and determine exactly why the affected records are becoming misaligned.
 
-The key questions are:
+### Questions still to answer
 
-Is the source CSV itself malformed?
+- Is the source CSV itself malformed?
+- Are quotation marks causing some records to be parsed incorrectly?
+- Is there a specific pattern shared by the affected records?
+- Can the affected records be recovered using different CSV-reader settings?
+- If they cannot be reliably recovered, how should they be handled when moving from Bronze to Silver?
 
-Are quotation marks causing some records to be parsed incorrectly?
+> **No records should be deleted or discarded at this stage.**
 
-Is there a specific pattern in the affected records?
+The goal is to identify the actual root cause before deciding how the data should be handled downstream.
 
-Can the affected records be recovered with different CSV-reader settings?
+---
 
-If they cannot be reliably recovered, how should they be handled when moving from Bronze to Silver?
+## 📌 Key Finding So Far
 
-No records should be deleted or discarded at this stage.
+What started as:
 
-The important finding so far is that the reviews dataset contains evidence of widespread field misalignment during CSV ingestion, rather than simply a small number of invalid IDs.
+> **1 NULL `review_id`**
+
+led to:
+
+> **2,558 suspicious `review_score` values**
+
+and then to:
+
+> **4,937 `review_id` values that failed the expected hexadecimal format**
+
+The investigation therefore moved from a simple NULL check to evidence of a potentially much broader **CSV field-alignment/parsing issue**.
+
+**Root cause: not yet confirmed.**
