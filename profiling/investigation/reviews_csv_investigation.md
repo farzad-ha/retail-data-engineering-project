@@ -115,7 +115,31 @@ The invalid ID format is evidence that the **parsed records are not always align
 
 ---
 
-## 7. 🔄 Revised Conclusion
+## 7. 🔗 Identifier and Referential Integrity Checks
+
+Additional validation was performed on the identifiers in the reviews dataset.
+
+| Check | Records |
+|---|---:|
+| Invalid `order_id` hexadecimal format | **2,702** |
+| `order_id` with no matching record in `orders` | **4,938** |
+| Records with both an invalid `review_id` and an unmatched `order_id` | **4,937** |
+
+The `order_id` format check identified **2,702 records** that do not conform to the expected 32-character hexadecimal format.
+
+The referential integrity check identified **4,938 records** whose `order_id` does not exist in the `orders` table.
+
+Most importantly, **4,937 records have both an invalid `review_id` and an unmatched `order_id`**.
+
+This means that all 4,937 records identified by the `review_id` format check are also part of the unmatched `order_id` records.
+
+The results provide stronger evidence that the anomalies affecting `review_id` and `order_id` are related to the same underlying field-alignment or parsing problem, rather than being independent ID-quality issues.
+
+There is **one additional unmatched `order_id`** that does not fall within those 4,937 records. This should be investigated separately once the larger parsing issue has been understood.
+
+---
+
+## 8. 🔄 Revised Conclusion
 
 The initial conclusion that the source CSV contained isolated malformed records was **too hasty**.
 
@@ -123,13 +147,14 @@ Inspecting a few raw records showed that commas were being used as delimiters an
 
 The later identifier validation and inspection of thousands of affected records provided stronger evidence that the problem is broader than the single malformed record initially discovered.
 
+
 ### Current interpretation
 
 The reviews dataset contains evidence of **widespread field misalignment during CSV ingestion/parsing**, rather than simply a small number of invalid IDs.
 
 ---
 
-## 8. 🧭 Current Status
+## 9. 🧭 Current Status
 
 > **Investigation still in progress.**
 
@@ -162,6 +187,18 @@ led to:
 and then to:
 
 > **4,937 `review_id` values that failed the expected hexadecimal format**
+
+and further to:
+
+> **2,702 `order_id` values that failed the expected hexadecimal format**
+
+and:
+
+> **4,938 `order_id` values with no matching record in `orders`**
+
+Most importantly:
+
+> **4,937 records have both an invalid `review_id` and an unmatched `order_id`.**
 
 The investigation therefore moved from a simple NULL check to evidence of a potentially much broader **CSV field-alignment/parsing issue**.
 
