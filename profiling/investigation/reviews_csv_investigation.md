@@ -139,42 +139,110 @@ There is **one additional unmatched `order_id`** that does not fall within those
 
 ---
 
-## 8. 🔄 Revised Conclusion
+## 8. 🧪 Attempting Pattern-Based Record Reconstruction
 
-The initial conclusion that the source CSV contained isolated malformed records was **too hasty**.
+Because the parsed records appeared to have values in the wrong columns, I explored whether the records could be reconstructed directly from the raw text without relying on the CSV delimiter structure.
 
-Inspecting a few raw records showed that commas were being used as delimiters and that some records appeared correctly structured. However, this was **not enough to establish that the entire file was being parsed correctly**.
+The idea was to use the known characteristics of the fields as anchors:
 
-The later identifier validation and inspection of thousands of affected records provided stronger evidence that the problem is broader than the single malformed record initially discovered.
+- `review_id` → 32-character hexadecimal
+- `order_id` → 32-character hexadecimal
+- `review_score` → 1–5
+- `review_creation_date` → timestamp
+- `review_answer_timestamp` → timestamp
 
+The two comment fields were temporarily treated as a single combined text field because they can contain arbitrary text and commas.
 
-### Current interpretation
+This produced a six-field reconstruction approach:
 
-The reviews dataset contains evidence of **widespread field misalignment during CSV ingestion/parsing**, rather than simply a small number of invalid IDs.
+    review_id
+    order_id
+    review_score
+    comments
+    review_creation_date
+    review_answer_timestamp
 
----
+The Spark-based pattern matching identified **95,372** raw lines matching the expected structure, while **9,348** lines did not match.
 
-## 9. 🧭 Current Status
+However, visual inspection showed that this approach did not reliably reconstruct the intended records, so it was not used as the final solution.
 
-> **Investigation still in progress.**
-
-The next step is to inspect the raw CSV more deeply and determine exactly why the affected records are becoming misaligned.
-
-### Questions still to answer
-
-- Is the source CSV itself malformed?
-- Are quotation marks causing some records to be parsed incorrectly?
-- Is there a specific pattern shared by the affected records?
-- Can the affected records be recovered using different CSV-reader settings?
-- If they cannot be reliably recovered, how should they be handled when moving from Bronze to Silver?
-
-> **No records should be deleted or discarded at this stage.**
-
-The goal is to identify the actual root cause before deciding how the data should be handled downstream.
+The experiment was useful because it provided another way to investigate the raw data without relying on the normal CSV column parsing.
 
 ---
 
-## 📌 Key Finding So Far
+## 9. 🧪 Testing the CSV Ingestion Configuration
+
+Several possible causes were tested before identifying the actual issue.
+
+### Explicit Schema
+
+The reviews dataset was read using an explicit seven-field schema:
+
+    StructType([
+        StructField("review_id", StringType(), True),
+        StructField("order_id", StringType(), True),
+        StructField("review_score", IntegerType(), True),
+        StructField("review_comment_title", StringType(), True),
+        StructField("review_comment_message", StringType(), True),
+        StructField("review_creation_date", TimestampType(), True),
+        StructField("review_answer_timestamp", TimestampType(), True)
+    ])
+
+The same anomalies remained:
+
+- Invalid `review_id`: **4,937**
+- Invalid `order_id`: **2,702**
+
+This showed that schema inference was not the underlying cause.
+
+### CSV Parsing Options
+
+Additional CSV options were tested, including explicit separator, quote and escape settings.
+
+These produced the same anomaly counts.
+
+Therefore, changing the schema and the tested separator/quote settings did not resolve the issue.
+
+---
+
+## 10. ✅ Root Cause Identified
+
+The reviews CSV contains **multi-line records**.
+
+The file was initially being read without enabling multiline CSV support. As a result, physical lines belonging to the same logical review record could be interpreted incorrectly, causing values to appear shifted into the wrong columns.
+
+The key ingestion option was:
+
+    .option("multiLine", "true")
+
+The corrected ingestion used both the explicit schema and multiline support:
+
+    df_reviews_fixed = spark.read \
+        .schema(schema) \
+        .option("header", "true") \
+        .option("multiLine", "true") \
+        .csv("/Volumes/second_data_engineering_project/landing/raw_files/olist_order_reviews_dataset.csv")
+
+---
+
+## 11. 🔎 Validation After the Fix
+
+The corrected DataFrame was re-profiled using the same checks that originally identified the problem.
+
+All previously failing checks returned **0**.
+
+| Validation | Before fix | After fix |
+|---|---:|---:|
+| Invalid `review_id` hexadecimal format | **4,937** | **0** |
+| Invalid `order_id` hexadecimal format | **2,702** | **0** |
+| Unmatched `order_id` in `orders` | **4,938** | **0** |
+| Invalid `review_score` format | **2,558** | **0** |
+
+This confirmed that the apparent field corruption was caused by the CSV ingestion configuration rather than thousands of independently corrupted identifiers.
+
+---
+
+## 📌 Final Conclusion
 
 What started as:
 
@@ -184,22 +252,26 @@ led to:
 
 > **2,558 suspicious `review_score` values**
 
-and then to:
+then to:
 
-> **4,937 `review_id` values that failed the expected hexadecimal format**
-
-and further to:
-
-> **2,702 `order_id` values that failed the expected hexadecimal format**
+> **4,937 invalid `review_id` values**
 
 and:
 
-> **4,938 `order_id` values with no matching record in `orders`**
+> **4,938 unmatched `order_id` values**
 
-Most importantly:
+The investigation initially suggested that the source records themselves might be malformed.
 
-> **4,937 records have both an invalid `review_id` and an unmatched `order_id`.**
+Further investigation ruled out schema inference and the tested separator/quote settings as the cause. A pattern-based reconstruction approach was also explored but was not reliable enough to use as the final solution.
 
-The investigation therefore moved from a simple NULL check to evidence of a potentially much broader **CSV field-alignment/parsing issue**.
+The actual cause was **multi-line CSV records being read without `multiLine=true`**.
 
-**Root cause: not yet confirmed.**
+Once the reviews file was read using the explicit seven-field schema together with multiline support, the previously identified data-quality violations were resolved.
+
+### Final Finding
+
+> **Root cause confirmed: the reviews CSV contains multi-line records, and the initial ingestion configuration did not enable multiline CSV parsing.**
+
+The source data was therefore not treated as thousands of independently corrupted IDs. The anomalies were caused by the way the records were being parsed during ingestion.
+
+**Investigation: ✅ Resolved**
