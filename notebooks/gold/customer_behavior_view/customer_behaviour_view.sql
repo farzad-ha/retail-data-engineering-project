@@ -3,7 +3,7 @@
 
 -- Create customer_behaviour view table — repeat customer flags, total spent, lifespan, category diversity, and preferred payment type per customer
 
-CREATE OR REPLACE VIEW second_data_engineering_project.gold.vw_customer_behaviour AS
+CREATE OR REPLACE VIEW second_data_engineering_project.gold.customer_behaviour_view AS
 SELECT
   customer_unique_id,
   customer_city,
