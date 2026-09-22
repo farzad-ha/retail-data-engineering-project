@@ -105,13 +105,13 @@ SELECT
     ELSE FALSE 
   END as is_late_delivery
   
-FROM second_data_engineering_project.silver.order_items oi
-INNER JOIN second_data_engineering_project.silver.orders o ON oi.order_id = o.order_id
-LEFT JOIN second_data_engineering_project.silver.customers c ON o.customer_id = c.customer_id
-LEFT JOIN geo_lookup cg ON c.customer_zip_code_prefix = cg.geolocation_zip_code_prefix
-LEFT JOIN second_data_engineering_project.silver.products p ON oi.product_id = p.product_id
+FROM second_data_engineering_project.silver.order_items AS oi
+INNER JOIN second_data_engineering_project.silver.orders AS o ON oi.order_id = o.order_id
+LEFT JOIN second_data_engineering_project.silver.customers AS c ON o.customer_id = c.customer_id
+LEFT JOIN geo_lookup AS cg ON c.customer_zip_code_prefix = cg.geolocation_zip_code_prefix
+LEFT JOIN second_data_engineering_project.silver.products AS p ON oi.product_id = p.product_id
 LEFT JOIN second_data_engineering_project.silver.product_category_name_translation ct ON p.product_category_name = ct.product_category_name
-LEFT JOIN second_data_engineering_project.silver.sellers s ON oi.seller_id = s.seller_id
-LEFT JOIN geo_lookup sg ON s.seller_zip_code_prefix = sg.geolocation_zip_code_prefix
-LEFT JOIN payments_agg pa ON oi.order_id = pa.order_id
-LEFT JOIN second_data_engineering_project.silver.reviews r ON oi.order_id = r.order_id
+LEFT JOIN second_data_engineering_project.silver.sellers AS s ON oi.seller_id = s.seller_id
+LEFT JOIN geo_lookup AS sg ON s.seller_zip_code_prefix = sg.geolocation_zip_code_prefix
+LEFT JOIN payments_agg AS pa ON oi.order_id = pa.order_id
+LEFT JOIN second_data_engineering_project.silver.reviews AS r ON oi.order_id = r.order_id
