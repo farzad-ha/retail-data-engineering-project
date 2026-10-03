@@ -41,6 +41,14 @@
 
 A parsing issue was identified during profiling and resolved through a dedicated investigation. See `reviews_csv_investigation.md` for details.
 
+UPDATE 
+- New source-data finding
+The review data contains several forms of missing or effectively empty review_comment_message
+values. A null message does not always mean that no comment exists, because review_comment_title
+may contain usable text.
+The profiling also identified values that are not technically NULL but function as empty comments: [., ?, !, :,
+;, ,,] and an empty string.
+
 ## Geolocation
 
 - No NULLs were found.
