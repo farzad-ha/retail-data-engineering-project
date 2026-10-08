@@ -18,6 +18,6 @@ SELECT
   AVG(delivery_days) AS avg_delivery_days,
   SUM(CASE WHEN is_late_delivery THEN 1 ELSE 0 END) AS late_deliveries,
   ROUND(SUM(CASE WHEN is_late_delivery THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS late_delivery_rate_pct
-FROM second_data_engineering_project.gold.orders_master_table
+FROM second_data_engineering_project.gold.master_table
 WHERE product_category_name_english IS NOT NULL
 GROUP BY product_category_name_english
