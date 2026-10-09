@@ -16,6 +16,6 @@ SELECT
   AVG(order_total_value) AS avg_order_value,
   SUM(total_payment_value) AS total_payment_received,
   COUNT(DISTINCT product_id) AS unique_products_sold
-FROM second_data_engineering_project.gold.orders_master_table
+FROM second_data_engineering_project.gold.master_table
 WHERE order_status IN ('delivered', 'shipped', 'approved')
 GROUP BY order_year, order_month, order_quarter, product_category_name_english, customer_state
