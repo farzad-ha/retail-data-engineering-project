@@ -20,6 +20,6 @@ SELECT
   ROUND(SUM(CASE WHEN is_late_delivery THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS late_delivery_rate_pct,
   MIN(order_date) AS first_sale_date,
   MAX(order_date) AS last_sale_date
-FROM second_data_engineering_project.gold.orders_master_table
+FROM second_data_engineering_project.gold.master_table
 WHERE seller_id IS NOT NULL
 GROUP BY seller_id, seller_city, seller_state
