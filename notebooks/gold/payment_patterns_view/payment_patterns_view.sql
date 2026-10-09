@@ -15,6 +15,6 @@ SELECT
   ROUND(SUM(CASE WHEN max_installments > 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS installment_rate_pct,
   AVG(payment_count) AS avg_payment_sequential_count,
   SUM(total_payment_value) AS total_payment_volume
-FROM second_data_engineering_project.gold.orders_master_table
+FROM second_data_engineering_project.gold.master_table
 WHERE primary_payment_type IS NOT NULL
 GROUP BY primary_payment_type, product_category_name_english, customer_state

@@ -18,6 +18,6 @@ SELECT
   SUM(CASE WHEN is_late_delivery THEN 1 ELSE 0 END) AS late_deliveries,
   ROUND(SUM(CASE WHEN is_late_delivery THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS late_delivery_rate_pct,
   AVG(review_score) AS avg_review_score
-FROM second_data_engineering_project.gold.orders_master_table
+FROM second_data_engineering_project.gold.master_table
 WHERE order_status = 'delivered'
 GROUP BY seller_id, seller_city, seller_state, product_category_name_english, customer_state
