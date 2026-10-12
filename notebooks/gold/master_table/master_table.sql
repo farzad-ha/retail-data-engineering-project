@@ -12,6 +12,33 @@ WITH payments_agg AS (
     COLLECT_SET(payment_type) as payment_types_list
   FROM second_data_engineering_project.silver.payments
   GROUP BY order_id
+),
+
+payment_counts AS (
+    SELECT
+        order_id,
+        payment_type,
+        COUNT(*) AS payment_type_count
+    FROM second_data_engineering_project.silver.payments
+    GROUP BY order_id, payment_type
+),
+
+default_payment AS (
+    SELECT
+        order_id,
+        payment_type,
+        ROW_NUMBER() OVER (
+            PARTITION BY order_id
+            ORDER BY payment_type_count DESC, payment_type
+        ) AS rn
+    FROM payment_counts
+),
+primary_payment AS (
+    SELECT
+        order_id,
+        payment_type AS primary_payment_type
+    FROM default_payment
+    WHERE rn = 1
 )
 SELECT
   oi.*,
@@ -22,6 +49,7 @@ SELECT
   r.* EXCEPT(order_id),
   ct.product_category_name_english,
   pa.* EXCEPT(order_id),
+  pp.payment_type,
 
   DATE(o.order_purchase_timestamp) as order_date,
   YEAR(o.order_purchase_timestamp) as order_year,
@@ -51,4 +79,5 @@ LEFT JOIN second_data_engineering_project.silver.products AS p ON oi.product_id 
 LEFT JOIN second_data_engineering_project.silver.product_category_name_translation AS ct ON p.product_category_name = ct.product_category_name
 LEFT JOIN second_data_engineering_project.silver.sellers AS s ON oi.seller_id = s.seller_id
 LEFT JOIN payments_agg AS pa ON oi.order_id = pa.order_id
+LEFT JOIN primary_payment AS pp ON oi.order_id = pp.order_id
 LEFT JOIN second_data_engineering_project.silver.reviews AS r ON oi.order_id = r.order_id;
