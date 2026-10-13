@@ -20,5 +20,5 @@ SELECT
   SUM(CASE WHEN review_score <= 2 THEN 1 ELSE 0 END) AS negative_reviews,
   primary_payment_type AS preferred_payment_type,
   CASE WHEN COUNT(DISTINCT order_id) > 1 THEN TRUE ELSE FALSE END AS is_repeat_customer
-FROM second_data_engineering_project.gold.orders_master_table
+FROM second_data_engineering_project.gold.master_table
 GROUP BY customer_unique_id, customer_city, customer_state, primary_payment_type
