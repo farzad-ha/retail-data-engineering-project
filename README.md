@@ -1,1 +1,3 @@
 # retail-data-engineering-project
+
+End-to-End Retail data engineering Project using bronze silver gold Medallion Architecture. Written in Advanced Pyspark and SQL. Got rescued_data columns and quarantine tables to catch any corrupt data not matching the schema. With several complex data cleaning methods for setting quality standards. Used star schema - Kimball method for creating a Facts table with A/B testing for fast read speeds and savings on compute costs. Finished with 8 highly valuable business insight views connected to the Facts table - ready to be used by the data analysts.
