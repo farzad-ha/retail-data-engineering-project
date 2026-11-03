@@ -1,6 +1,6 @@
 -- Databricks notebook source
 -- DBTITLE 1,Create view
--- Creates vw_geographic_sales — sales volume, revenue, delivery KPIs, and review scores by city and state with lat/lng coordinates.
+-- Creates geographic_sales view — sales volume, revenue, delivery KPIs, and review scores by city and state with lat/lng coordinates.
 
 CREATE OR REPLACE VIEW second_data_engineering_project.gold.geographic_sales_view AS
 WITH unique_geolocation AS (
