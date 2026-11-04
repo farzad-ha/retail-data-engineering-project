@@ -41,26 +41,75 @@ df_with_flag = (
     )
 )
 
-# Split into valid and quarantine tables
-df_silver = df_with_flag.filter(F.col("data_quality_flag") == "valid").drop("data_quality_flag")
-df_quarantine = df_with_flag.filter(F.col("data_quality_flag") == "quarantine").drop("data_quality_flag")
+# Define the Insert-Only Merge function for the Silver table
+def merge_into_silver(microBatchDF, batchId):
+    # Safety optimization to instantly skip empty micro-batches
+    if not microBatchDF.take(1):
+        return
 
-# Drop _rescued_data column
-# Drop duplicates
-df_silver = df_silver.drop("_rescued_data").dropDuplicates(["customer_id"])
+    # Filter for valid rows, clean up tracking columns, and drop internal batch duplicates
+    valid_df = (
+        microBatchDF
+        .filter(F.col("data_quality_flag") == "valid")
+        .drop("data_quality_flag", "_rescued_data")
+        .dropDuplicates(["customer_id"])
+    )
+
+    # If no valid data exists in this specific slice, skip running the SQL query
+    if not valid_df.take(1):
+        return
+
+    # Register the dataframe to the micro-batch local session view
+    valid_df.createOrReplaceTempView("incoming_valid_customers")
+
+    # Execute the insert-only merge statement (No UPDATE or DELETE clause to protect historic data)
+    microBatchDF.sparkSession.sql("""
+        MERGE INTO second_data_engineering_project.silver.customers AS target
+        USING incoming_valid_customers AS source
+        ON (target.customer_id = source.customer_id)
+        WHEN NOT MATCHED THEN
+            INSERT *
+    """)
+
+ # Define the Append function for the Quarantine table
+def append_into_quarantine(microBatchDF, batchId):
+    # Safety optimization to instantly skip empty micro-batches
+    if not microBatchDF.take(1):
+        return
+
+    # Filter for quarantined rows and drop the tracking flag
+    quarantine_df = (
+        microBatchDF
+        .filter(F.col("data_quality_flag") == "quarantine")
+        .drop("data_quality_flag")
+    )
+
+    # If no quarantine data exists in this specific slice, skip writing
+    if not quarantine_df.take(1):
+        return
+
+    # Append standard delta format rows directly into the quarantine table
+    (quarantine_df.write
+        .format("delta")
+        .mode("append")
+        .option("mergeSchema", "true")
+        .saveAsTable("second_data_engineering_project.silver.customers_quarantine")
+    )
 
 # Write valid records to silver table
-df_silver.writeStream \
+query_silver = df_with_flag.writeStream \
+    .foreachBatch(merge_into_silver) \
     .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/customers") \
     .trigger(availableNow=True) \
-    .option("mergeSchema", "true") \
-    .table("second_data_engineering_project.silver.customers")
+    .start()
 
 # Write quarantine records to quarantine table
-df_quarantine.writeStream \
+query_quarantine = df_with_flag.writeStream \
+    .foreachBatch(append_into_quarantine) \
     .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/customers_quarantine") \
     .trigger(availableNow=True) \
-    .option("mergeSchema", "true") \
-    .table("second_data_engineering_project.silver.customers_quarantine")
+    .start()
 
 
+query_silver.awaitTermination()
+query_quarantine.awaitTermination()
