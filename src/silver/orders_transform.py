@@ -70,40 +70,99 @@ df_with_flags = (
     )
 )
 
-# Three-way split: valid, quarantine, and exceptions
-# drop _rescued_data for df_exceptions & df_silver
-df_silver = df_with_flags.filter(
-    (F.col("data_quality_flag") == "valid") & 
-    F.col("exception_flag").isNull()
-).drop("data_quality_flag", "exception_flag").drop("_rescued_data").dropDuplicates(["order_id"])
+# Define the Insert-Only Merge function for the Silver Orders table
+def merge_into_silver_orders(microBatchDF, batchId):
+    if not microBatchDF.take(1): 
+        return
+    
+    # Extract clean, non-duplicated valid orders for this batch
+    silver_df = (
+        microBatchDF
+        .filter((F.col("data_quality_flag") == "valid") & F.col("exception_flag").isNull())
+        .drop("data_quality_flag", "exception_flag", "_rescued_data")
+        .dropDuplicates(["order_id"])
+    )
+    
+    if not silver_df.take(1):
+        return
 
-df_quarantine = df_with_flags.filter(
-    F.col("data_quality_flag") == "quarantine"
-).drop("data_quality_flag", "exception_flag")
+    silver_df.createOrReplaceTempView("incoming_valid_orders")
+    
+    # Execute the insert-only merge query matching on order_id
+    microBatchDF.sparkSession.sql("""
+        MERGE INTO second_data_engineering_project.silver.orders AS target
+        USING incoming_valid_orders AS source
+        ON (target.order_id = source.order_id)
+        WHEN NOT MATCHED THEN
+            INSERT *
+    """)
 
-df_exceptions = df_with_flags.filter(
-    (F.col("data_quality_flag") == "valid") & 
-    F.col("exception_flag").isNotNull()
-).drop("data_quality_flag").drop("_rescued_data")
+# Define the Append function for the Quarantine Orders table
+def append_into_quarantine_orders(microBatchDF, batchId):
+    if not microBatchDF.take(1): 
+        return
+        
+    quarantine_df = (
+        microBatchDF
+        .filter(F.col("data_quality_flag") == "quarantine")
+        .drop("data_quality_flag", "exception_flag")
+    )
+    
+    if not quarantine_df.take(1):
+        return
 
-# Write valid records to silver table
-df_silver.writeStream \
+    (quarantine_df.write
+        .format("delta")
+        .mode("append")
+        .option("mergeSchema", "true")
+        .saveAsTable("second_data_engineering_project.silver.orders_quarantine")
+    )
+
+# Define the Append function for the Exceptions Orders table
+def append_into_exceptions_orders(microBatchDF, batchId):
+    if not microBatchDF.take(1): 
+        return
+        
+    exceptions_df = (
+        microBatchDF
+        .filter((F.col("data_quality_flag") == "valid") & F.col("exception_flag").isNotNull())
+        .drop("data_quality_flag", "_rescued_data")
+    )
+    
+    if not exceptions_df.take(1):
+        return
+
+    (exceptions_df.write
+        .format("delta")
+        .mode("append")
+        .option("mergeSchema", "true")
+        .saveAsTable("second_data_engineering_project.silver.orders_exceptions")
+    )
+
+
+# Start the Streams targeting the function writers out of df_with_flags
+query_silver = (df_with_flags.writeStream
+    .foreachBatch(merge_into_silver_orders)
     .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/orders") \
     .trigger(availableNow=True) \
-    .option("mergeSchema", "true") \
-    .table("second_data_engineering_project.silver.orders")
+    .start()
+)
 
-# Write quarantine records to quarantine table
-df_quarantine.writeStream \
+query_quarantine = (df_with_flags.writeStream
+    .foreachBatch(append_into_quarantine_orders)
     .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/orders_quarantine") \
     .trigger(availableNow=True) \
-    .option("mergeSchema", "true") \
-    .table("second_data_engineering_project.silver.orders_quarantine")
+    .start()
+)
 
-# Write exception records to exceptions table (business clarification needed)
-df_exceptions.writeStream \
+query_exceptions = (df_with_flags.writeStream
+    .foreachBatch(append_into_exceptions_orders)
     .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/orders_exceptions") \
     .trigger(availableNow=True) \
-    .option("mergeSchema", "true") \
-    .table("second_data_engineering_project.silver.orders_exceptions")
+    .start()
+)
 
+# Safety locks to ensure all three branches process to completion
+query_silver.awaitTermination()
+query_quarantine.awaitTermination()
+query_exceptions.awaitTermination()
