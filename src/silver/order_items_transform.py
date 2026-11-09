@@ -68,22 +68,79 @@ df_with_flag = (
     .drop("_order_exists", "_product_exists", "_seller_exists")
 )
 
-# Split into valid and quarantine DataFrames
-# Drop duplicates only from df_silver
-# Drop _rescued_data column only from df_silver
-df_silver = df_with_flag.filter(F.col("data_quality_flag") == "valid").drop("data_quality_flag").drop("_rescued_data").dropDuplicates(["order_id", "order_item_id"])
-df_quarantine = df_with_flag.filter(F.col("data_quality_flag") == "quarantine").drop("data_quality_flag")
+# Split into Valid and Quarantine DataFrames
+# Apply deduplication and drop columns specifically for silver streaming micro-batches
+df_silver_stream = (
+    df_with_flag
+    .filter(F.col("data_quality_flag") == "valid")
+    .drop("data_quality_flag")
+    .drop("_rescued_data")
+  
+)
 
-# Write valid records to silver table
-df_silver.writeStream \
+df_quarantine_stream = (
+    df_with_flag
+    .filter(F.col("data_quality_flag") == "quarantine")
+    .drop("data_quality_flag")
+)
+
+# Define the foreachBatch Merge function for Silver
+def upsert_to_silver(micro_batch_df, batch_id):
+    # Skip processing entirely if the incoming micro-batch has no new records
+    if micro_batch_df.isEmpty():
+        return
+    # Deduplicate micro-batch records before executing MERGE to prevent ambiguous match errors
+    deduplicated_batch = micro_batch_df.dropDuplicates(["order_id", "order_item_id"])
+    
+    # Expose the micro-batch as a temporary view for Spark SQL syntax
+    deduplicated_batch.createOrReplaceTempView("source_updates")
+    
+    # Execute the atomic Merge Statement
+    micro_batch_df.sparkSession.sql("""
+        MERGE INTO second_data_engineering_project.silver.order_items AS target
+        USING source_updates AS source
+        ON target.order_id = source.order_id AND target.order_item_id = source.order_item_id
+        WHEN MATCHED THEN
+            UPDATE SET *
+        WHEN NOT MATCHED THEN
+            INSERT *
+    """)
+
+def append_to_quarantine(micro_batch_df, batch_id):
+    # This prevents the stream from committing an empty transaction block to Delta
+    if micro_batch_df.isEmpty():
+        return
+        
+    # Standard append write converted to batch syntax
+    (
+        micro_batch_df.write
+        .format("delta")
+        .option("mergeSchema", "true")
+        .mode("append")
+        .saveAsTable("second_data_engineering_project.silver.order_items_quarantine")
+    )
+
+# Run the Streams
+# Silver Stream (Using foreachBatch for the custom MERGE block)
+silver_query = (
+    df_silver_stream.writeStream \
+    .foreachBatch(upsert_to_silver) \
     .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/order_items") \
     .trigger(availableNow=True) \
     .option("mergeSchema", "true") \
-    .table("second_data_engineering_project.silver.order_items")
+    .start()
+)
 
-# Write quarantine records to quarantine table
-df_quarantine.writeStream \
+# Run the Streams
+# Runs via the function append_to_quarantine
+quarantine_query = (
+    df_quarantine_stream.writeStream \
+    .foreachBatch(append_to_quarantine) \
     .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/order_items_quarantine") \
     .trigger(availableNow=True) \
-    .option("mergeSchema", "true") \
-    .table("second_data_engineering_project.silver.order_items_quarantine")
+    .start()
+)
+
+# Wait for terminations
+silver_query.awaitTermination()
+quarantine_query.awaitTermination()
