@@ -62,12 +62,24 @@ def upsert_to_silver(micro_batch_df, batch_id):
     # Deduplicate micro-batch records before executing MERGE to prevent ambiguous match errors
     deduplicated_batch = micro_batch_df.dropDuplicates(["order_id", "payment_sequential"])
     
+    target_table = "second_data_engineering_project.silver.payments"
+    
+    # Automatically create the Silver table on the very first run if it does not exist yet
+    if not micro_batch_df.sparkSession.catalog.tableExists(target_table):
+        (
+            deduplicated_batch.write
+            .format("delta")
+            .mode("overwrite")
+            .saveAsTable(target_table)
+        )
+        return
+    
     # Expose the micro-batch as a temporary view for Spark SQL syntax
     deduplicated_batch.createOrReplaceTempView("source_updates")
     
     # Execute the atomic Merge Statement
-    micro_batch_df.sparkSession.sql("""
-        MERGE INTO second_data_engineering_project.silver.payments AS target
+    micro_batch_df.sparkSession.sql(f"""
+        MERGE INTO {target_table} AS target
         USING source_updates AS source
         ON target.order_id = source.order_id AND target.payment_sequential = source.payment_sequential
         WHEN MATCHED THEN
