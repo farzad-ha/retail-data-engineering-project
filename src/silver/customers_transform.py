@@ -59,19 +59,31 @@ def merge_into_silver(microBatchDF, batchId):
     if not valid_df.take(1):
         return
 
+    target_table = "second_data_engineering_project.silver.customers"
+
+    # Automatically create the Silver table on the very first run if it does not exist yet
+    if not microBatchDF.sparkSession.catalog.tableExists(target_table):
+        (
+            valid_df.write
+            .format("delta")
+            .mode("overwrite")
+            .saveAsTable(target_table)
+        )
+        return
+
     # Register the dataframe to the micro-batch local session view
     valid_df.createOrReplaceTempView("incoming_valid_customers")
 
     # Execute the insert-only merge statement (No UPDATE or DELETE clause to protect historic data)
-    microBatchDF.sparkSession.sql("""
-        MERGE INTO second_data_engineering_project.silver.customers AS target
+    microBatchDF.sparkSession.sql(f"""
+        MERGE INTO {target_table} AS target
         USING incoming_valid_customers AS source
         ON (target.customer_id = source.customer_id)
         WHEN NOT MATCHED THEN
             INSERT *
     """)
 
- # Define the Append function for the Quarantine table
+# Define the Append function for the Quarantine table
 def append_into_quarantine(microBatchDF, batchId):
     # Safety optimization to instantly skip empty micro-batches
     if not microBatchDF.take(1):
