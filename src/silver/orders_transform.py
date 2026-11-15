@@ -86,11 +86,23 @@ def merge_into_silver_orders(microBatchDF, batchId):
     if not silver_df.take(1):
         return
 
+    target_table = "second_data_engineering_project.silver.orders"
+
+    # Automatically create the Silver table on the very first run if it does not exist yet
+    if not microBatchDF.sparkSession.catalog.tableExists(target_table):
+        (
+            silver_df.write
+            .format("delta")
+            .mode("overwrite")
+            .saveAsTable(target_table)
+        )
+        return
+
     silver_df.createOrReplaceTempView("incoming_valid_orders")
     
     # Execute the insert-only merge query matching on order_id
-    microBatchDF.sparkSession.sql("""
-        MERGE INTO second_data_engineering_project.silver.orders AS target
+    microBatchDF.sparkSession.sql(f"""
+        MERGE INTO {target_table} AS target
         USING incoming_valid_orders AS source
         ON (target.order_id = source.order_id)
         WHEN NOT MATCHED THEN
