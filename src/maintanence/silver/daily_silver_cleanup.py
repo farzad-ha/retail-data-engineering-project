@@ -1,3 +1,9 @@
+# Top-level configuration variables
+catalog = "second_data_engineering_project"
+source_schema = "bronze"
+target_schema = "silver"
+
+# Table-to-join-condition mapping
 cleanup_configs = [
     {
         "table_name": "customers",
@@ -44,10 +50,24 @@ cleanup_configs = [
 ]
 
 # Execution loop accessing keys by explicit name
+# Skip cleanup if the target Silver table has not been created yet
 for config in cleanup_configs:
     table_name = config["table_name"]
     join_condition = config["join_condition"]
     
     source_table = f"{catalog}.{source_schema}.{table_name}"
     target_table = f"{catalog}.{target_schema}.{table_name}"
-    ...
+    
+    if not spark.catalog.tableExists(target_table):
+        continue
+
+    delete_query = f"""
+        DELETE FROM {target_table} AS target
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM {source_table} AS source
+            WHERE {join_condition}
+        )
+    """
+    
+    spark.sql(delete_query)
