@@ -1,7 +1,6 @@
 -- Databricks notebook source
 -- DBTITLE 1,Create master table
 CREATE OR REFRESH MATERIALIZED VIEW second_data_engineering_project.gold.master_table
-CLUSTER BY (order_year, order_month)
 AS
 WITH payments_agg AS (
   SELECT 
