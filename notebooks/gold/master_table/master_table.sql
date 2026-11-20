@@ -1,7 +1,7 @@
 -- Databricks notebook source
 -- DBTITLE 1,Create master table
-CREATE OR REFRESH STREAMING TABLE second_data_engineering_project.gold.master_table
-PARTITIONED BY (order_year, order_month)
+CREATE OR REFRESH MATERIALIZED VIEW second_data_engineering_project.gold.master_table
+CLUSTER BY (order_year, order_month)
 AS
 WITH payments_agg AS (
   SELECT 
@@ -49,7 +49,7 @@ SELECT
   r.* EXCEPT(order_id),
   ct.product_category_name_english,
   pa.* EXCEPT(order_id),
-  pp.payment_type,
+  pp.primary_payment_type AS payment_type,
 
   DATE(o.order_purchase_timestamp) as order_date,
   YEAR(o.order_purchase_timestamp) as order_year,
@@ -72,7 +72,7 @@ SELECT
     ELSE FALSE 
   END as is_late_delivery
   
-FROM STREAM second_data_engineering_project.silver.order_items AS oi
+FROM second_data_engineering_project.silver.order_items AS oi
 INNER JOIN second_data_engineering_project.silver.orders AS o ON oi.order_id = o.order_id
 LEFT JOIN second_data_engineering_project.silver.customers AS c ON o.customer_id = c.customer_id
 LEFT JOIN second_data_engineering_project.silver.products AS p ON oi.product_id = p.product_id

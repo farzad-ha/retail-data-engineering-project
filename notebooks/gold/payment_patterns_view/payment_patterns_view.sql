@@ -4,7 +4,7 @@
 
 CREATE OR REPLACE VIEW second_data_engineering_project.gold.payment_patterns_view AS
 SELECT
-  primary_payment_type AS payment_type,
+  payment_type,
   product_category_name_english AS product_category,
   customer_state,
   COUNT(*) AS total_orders,
@@ -16,5 +16,5 @@ SELECT
   AVG(payment_count) AS avg_payment_sequential_count,
   SUM(total_payment_value) AS total_payment_volume
 FROM second_data_engineering_project.gold.master_table
-WHERE primary_payment_type IS NOT NULL
-GROUP BY primary_payment_type, product_category_name_english, customer_state
+WHERE payment_type IS NOT NULL
+GROUP BY payment_type, product_category_name_english, customer_state
