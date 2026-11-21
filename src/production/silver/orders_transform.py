@@ -1,6 +1,11 @@
-df_bronze = spark.readStream.table("second_data_engineering_project.bronze.orders")
-
 from pyspark.sql import functions as F
+
+catalog = "second_data_engineering_project"
+
+silver_base_path = "abfss://silver@engineerolistproject.dfs.core.windows.net"
+metadata_base_path = f"{silver_base_path}/pipeline_metadata/checkpoints"
+
+df_bronze = spark.readStream.table(f"{catalog}.bronze.orders")
 
 # Trim and standardize fields, add data quality flag
 # Check for null, empty, invalid values, and logical timestamp order
@@ -94,6 +99,7 @@ def merge_into_silver_orders(microBatchDF, batchId):
             silver_df.write
             .format("delta")
             .mode("overwrite")
+            .option("path", f"{silver_base_path}/tables/orders")
             .saveAsTable(target_table)
         )
         return
@@ -127,7 +133,8 @@ def append_into_quarantine_orders(microBatchDF, batchId):
         .format("delta")
         .mode("append")
         .option("mergeSchema", "true")
-        .saveAsTable("second_data_engineering_project.silver.orders_quarantine")
+        .option("path", f"{silver_base_path}/tables/orders_quarantine")
+        .saveAsTable(f"{catalog}.silver.orders_quarantine")
     )
 
 # Define the Append function for the Exceptions Orders table
@@ -148,28 +155,29 @@ def append_into_exceptions_orders(microBatchDF, batchId):
         .format("delta")
         .mode("append")
         .option("mergeSchema", "true")
-        .saveAsTable("second_data_engineering_project.silver.orders_exceptions")
+        .option("path", f"{silver_base_path}/tables/orders_exceptions")
+        .saveAsTable(f"{catalog}.silver.orders_exceptions")
     )
 
 
 # Start the Streams targeting the function writers out of df_with_flags
 query_silver = (df_with_flags.writeStream
     .foreachBatch(merge_into_silver_orders)
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/orders") \
+    .option("checkpointLocation", f"{metadata_base_path}/orders") \
     .trigger(availableNow=True) \
     .start()
 )
 
 query_quarantine = (df_with_flags.writeStream
     .foreachBatch(append_into_quarantine_orders)
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/orders_quarantine") \
+    .option("checkpointLocation", f"{metadata_base_path}/orders_quarantine") \
     .trigger(availableNow=True) \
     .start()
 )
 
 query_exceptions = (df_with_flags.writeStream
     .foreachBatch(append_into_exceptions_orders)
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/orders_exceptions") \
+    .option("checkpointLocation", f"{metadata_base_path}/orders_exceptions") \
     .trigger(availableNow=True) \
     .start()
 )

@@ -1,6 +1,12 @@
-df_bronze = spark.readStream.table("second_data_engineering_project.bronze.products")
-
 from pyspark.sql import functions as F
+
+catalog = "second_data_engineering_project"
+
+silver_base_path = "abfss://silver@engineerolistproject.dfs.core.windows.net"
+
+metadata_base_path = f"{silver_base_path}/pipeline_metadata/checkpoints"
+
+df_bronze = spark.readStream.table(f"{catalog}.bronze.products")
 
 # Trim product_id and add data quality flag
 # Check for null, empty, or zero values, and invalid format
@@ -84,6 +90,7 @@ def upsert_to_silver(micro_batch_df, batch_id):
             deduplicated_batch.write
             .format("delta")
             .mode("overwrite")
+            .option("path", f"{silver_base_path}/tables/products")
             .saveAsTable(target_table)
         )
         return
@@ -114,7 +121,8 @@ def append_to_quarantine(micro_batch_df, batch_id):
         .format("delta")
         .option("mergeSchema", "true")
         .mode("append")
-        .saveAsTable("second_data_engineering_project.silver.products_quarantine")
+        .option("path", f"{silver_base_path}/tables/products_quarantine")
+        .saveAsTable(f"{catalog}.silver.products_quarantine")
     )
 
 # Run the Streams
@@ -122,7 +130,7 @@ def append_to_quarantine(micro_batch_df, batch_id):
 silver_query = (
     df_silver_stream.writeStream \
     .foreachBatch(upsert_to_silver) \
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/products") \
+    .option("checkpointLocation", f"{metadata_base_path}/products") \
     .trigger(availableNow=True) \
     .option("mergeSchema", "true") \
     .start()
@@ -132,7 +140,7 @@ silver_query = (
 quarantine_query = (
     df_quarantine_stream.writeStream \
     .foreachBatch(append_to_quarantine) \
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/products_quarantine") \
+    .option("checkpointLocation", f"{metadata_base_path}/products_quarantine") \
     .trigger(availableNow=True) \
     .option("mergeSchema", "true") \
     .start()

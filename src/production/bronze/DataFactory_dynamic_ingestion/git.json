@@ -1,0 +1,48 @@
+[
+   { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/olist_customers_dataset.csv",
+        "p_file_name" : "olist_customers_dataset.csv"
+    },
+    
+    { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/olist_geolocation_dataset.csv",
+        "p_file_name" : "olist_geolocation_dataset.csv"
+    },
+    { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/olist_order_items_dataset.csv",
+        "p_file_name" : "olist_order_items_dataset.csv"
+    },
+    
+    { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/olist_order_payments_dataset.csv",
+        "p_file_name" : "olist_order_payments_dataset.csv"
+    },
+    
+    { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/olist_order_reviews_dataset.csv",
+        "p_file_name" : "olist_order_reviews_dataset.csv"
+    },
+    
+    { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/olist_order_reviews_dataset.csv",
+        "p_file_name" : "olist_order_reviews_dataset.csv"
+    },
+    
+    { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/olist_orders_dataset.csv",
+        "p_file_name" : "olist_orders_dataset.csv"
+    },
+    
+    { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/olist_products_dataset.csv",
+        "p_file_name" : "olist_products_dataset.csv"
+    },
+    { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/olist_sellers_dataset.csv",
+        "p_file_name" : "olist_sellers_dataset.csv"
+    },
+    { 
+        "p_rel_url" : "NoahPlage/Olist-Business-Analysis/refs/heads/main/data/product_category_name_translation.csv",
+        "p_file_name" : "product_category_name_translation.csv"
+    }
+]

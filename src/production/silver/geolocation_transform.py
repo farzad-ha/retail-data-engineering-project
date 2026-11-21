@@ -1,6 +1,13 @@
-df = spark.readStream.table("second_data_engineering_project.bronze.geolocation")
-
 from pyspark.sql import functions as F
+
+# Top-level configuration variables
+catalog = "second_data_engineering_project"
+
+silver_base_path = "abfss://silver@engineerolistproject.dfs.core.windows.net"
+
+metadata_base_path = f"{silver_base_path}/pipeline_metadata/checkpoints"
+
+df = spark.readStream.table(f"{catalog}.bronze.geolocation")
 
 # Clean and standardise string columns, then add quality flag
 df_with_flag = (
@@ -74,6 +81,7 @@ def upsert_to_silver(micro_batch_df, batch_id):
             deduplicated_batch.write
             .format("delta")
             .mode("overwrite")
+            .option("path", f"{silver_base_path}/tables/geolocation")
             .saveAsTable(target_table)
         )
         return
@@ -108,7 +116,8 @@ def append_to_quarantine(micro_batch_df, batch_id):
         .format("delta")
         .option("mergeSchema", "true")
         .mode("append")
-        .saveAsTable("second_data_engineering_project.silver.geolocation_quarantine")
+        .option("path", f"{silver_base_path}/tables/geolocation_quarantine")
+        .saveAsTable(f"{catalog}.silver.geolocation_quarantine")
     )
 
 # Run the Streams
@@ -116,9 +125,11 @@ def append_to_quarantine(micro_batch_df, batch_id):
 silver_query = (
     df_silver_stream.writeStream
     .foreachBatch(upsert_to_silver)
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/geolocation_silver") \
-    .trigger(availableNow=True) \
-    .option("mergeSchema", "true") \
+    .option(
+    "checkpointLocation",
+    f"{metadata_base_path}/geolocation_silver")
+    .trigger(availableNow=True) 
+    .option("mergeSchema", "true") 
     .start()
 )
 
@@ -126,9 +137,11 @@ silver_query = (
 quarantine_query = (
     df_quarantine_stream.writeStream
     .foreachBatch(append_to_quarantine)
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/geolocation_quarantine") \
-    .trigger(availableNow=True) \
-    .option("mergeSchema", "true") \
+    .option(
+    "checkpointLocation",
+    f"{metadata_base_path}/geolocation_quarantine")
+    .trigger(availableNow=True) 
+    .option("mergeSchema", "true") 
     .start()
 )
 

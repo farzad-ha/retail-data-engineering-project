@@ -1,6 +1,12 @@
-df_bronze = spark.readStream.table("second_data_engineering_project.bronze.payments")
-
 from pyspark.sql import functions as F
+
+catalog = "second_data_engineering_project"
+
+silver_base_path = "abfss://silver@engineerolistproject.dfs.core.windows.net"
+
+metadata_base_path = f"{silver_base_path}/pipeline_metadata/checkpoints"
+
+df_bronze = spark.readStream.table(f"{catalog}.bronze.payments")
 
 # Trim order_id and payment_type, add data quality flag
 # Check for null, empty, invalid values
@@ -70,6 +76,7 @@ def upsert_to_silver(micro_batch_df, batch_id):
             deduplicated_batch.write
             .format("delta")
             .mode("overwrite")
+            .option("path", f"{silver_base_path}/tables/payments")
             .saveAsTable(target_table)
         )
         return
@@ -100,7 +107,8 @@ def append_to_quarantine(micro_batch_df, batch_id):
         .format("delta")
         .option("mergeSchema", "true")
         .mode("append")
-        .saveAsTable("second_data_engineering_project.silver.payments_quarantine")
+        .option("path", f"{silver_base_path}/tables/payments_quarantine")
+        .saveAsTable(f"{catalog}.silver.payments_quarantine")
     )
 
 
@@ -110,7 +118,7 @@ def append_to_quarantine(micro_batch_df, batch_id):
 silver_query = (
     df_silver_stream.writeStream \
     .foreachBatch(upsert_to_silver) \
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/payments") \
+    .option("checkpointLocation", f"{metadata_base_path}/payments") \
     .trigger(availableNow=True) \
     .option("mergeSchema", "true") \
     .start()
@@ -122,7 +130,7 @@ silver_query = (
 quarantine_query = (
     df_quarantine_stream.writeStream \
     .foreachBatch(append_to_quarantine) \
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/payments_quarantine") \
+    .option("checkpointLocation", f"{metadata_base_path}/payments_quarantine") \
     .trigger(availableNow=True) \
     .option("mergeSchema", "true") \
     .start()

@@ -1,6 +1,13 @@
-df_bronze = spark.readStream.table("second_data_engineering_project.bronze.customers")
-
 from pyspark.sql import functions as F
+
+# Top-level configuration variables
+catalog = "second_data_engineering_project"
+
+silver_base_path = "abfss://silver@engineerolistproject.dfs.core.windows.net"
+
+metadata_base_path = f"{silver_base_path}/pipeline_metadata/checkpoints"
+
+df_bronze = spark.readStream.table(f"{catalog}.bronze.customers")
 
 # Trim customer_id and add data quality flag
 # Check for null, empty, or zero values, and invalid format
@@ -67,6 +74,7 @@ def merge_into_silver(microBatchDF, batchId):
             valid_df.write
             .format("delta")
             .mode("overwrite")
+            .option("path", f"{silver_base_path}/tables/customers")
             .saveAsTable(target_table)
         )
         return
@@ -105,20 +113,26 @@ def append_into_quarantine(microBatchDF, batchId):
         .format("delta")
         .mode("append")
         .option("mergeSchema", "true")
-        .saveAsTable("second_data_engineering_project.silver.customers_quarantine")
+        .option("path", f"{silver_base_path}/tables/customers_quarantine")
+        .saveAsTable(f"{catalog}.silver.customers_quarantine")
     )
 
 # Write valid records to silver table
 query_silver = df_with_flag.writeStream \
     .foreachBatch(merge_into_silver) \
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/customers") \
+    .option(
+    "checkpointLocation",
+    f"{metadata_base_path}/customers") \
     .trigger(availableNow=True) \
     .start()
+    
 
 # Write quarantine records to quarantine table
 query_quarantine = df_with_flag.writeStream \
     .foreachBatch(append_into_quarantine) \
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/customers_quarantine") \
+    .option(
+    "checkpointLocation",
+    f"{metadata_base_path}/customers_quarantine") \
     .trigger(availableNow=True) \
     .start()
 

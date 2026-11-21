@@ -1,11 +1,18 @@
-df = spark.readStream.table("second_data_engineering_project.bronze.order_items")
+from pyspark.sql import functions as F
+
+# Top-level configuration variables
+catalog = "second_data_engineering_project"
+
+silver_base_path = "abfss://silver@engineerolistproject.dfs.core.windows.net"
+
+metadata_base_path = f"{silver_base_path}/pipeline_metadata/checkpoints"
+
+df = spark.readStream.table(f"{catalog}.bronze.order_items")
 
 # Load reference data for relationship validation (as batch DataFrames)
 valid_orders = spark.table("second_data_engineering_project.bronze.orders").select("order_id").distinct()
 valid_products = spark.table("second_data_engineering_project.bronze.products").select("product_id").distinct()
 valid_sellers = spark.table("second_data_engineering_project.bronze.sellers").select("seller_id").distinct()
-
-from pyspark.sql import functions as F
 
 # Add marker columns to reference tables for clean left-join existence checks
 valid_orders_marked = valid_orders.withColumn("_order_exists", F.lit(True))
@@ -100,6 +107,7 @@ def upsert_to_silver(micro_batch_df, batch_id):
             deduplicated_batch.write
             .format("delta")
             .mode("overwrite")
+            .option("path", f"{silver_base_path}/tables/order_items")
             .saveAsTable(target_table)
         )
         return
@@ -129,27 +137,32 @@ def append_to_quarantine(micro_batch_df, batch_id):
         .format("delta")
         .option("mergeSchema", "true")
         .mode("append")
-        .saveAsTable("second_data_engineering_project.silver.order_items_quarantine")
+        .option("path", f"{silver_base_path}/tables/order_items_quarantine")
+        .saveAsTable(f"{catalog}.silver.order_items_quarantine")
     )
 
 # Run the Streams
 # Silver Stream (Using foreachBatch for the custom MERGE block)
 silver_query = (
-    df_silver_stream.writeStream \
-    .foreachBatch(upsert_to_silver) \
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/order_items") \
-    .trigger(availableNow=True) \
-    .option("mergeSchema", "true") \
+    df_silver_stream.writeStream 
+    .foreachBatch(upsert_to_silver)
+    .option(
+    "checkpointLocation",
+    f"{metadata_base_path}/order_items")
+    .trigger(availableNow=True)
+    .option("mergeSchema", "true")
     .start()
 )
 
 # Run the Streams
 # Runs via the function append_to_quarantine
 quarantine_query = (
-    df_quarantine_stream.writeStream \
-    .foreachBatch(append_to_quarantine) \
-    .option("checkpointLocation", "/Volumes/second_data_engineering_project/pipeline_metadata/autoloader_metadata/checkpoints/silver/order_items_quarantine") \
-    .trigger(availableNow=True) \
+    df_quarantine_stream.writeStream 
+    .foreachBatch(append_to_quarantine) 
+    .option(
+    "checkpointLocation",
+    f"{metadata_base_path}/order_items_quarantine")
+    .trigger(availableNow=True) 
     .start()
 )
 
