@@ -40,7 +40,7 @@ The Databricks production workflow orchestrates Bronze ingestion, individual Sil
 
 The diagram illustrates how Bronze data is cleaned and validated using PySpark. Valid records are written to Silver Delta tables and passed to Gold, while invalid records are separated into quarantine tables for investigation.
 
-![Silver Data Quality and Transformation Flow](docs/Data__flow.png)
+![Silver Data Quality and Transformation Flow](docs/Data_flow.png) 
 
 ---
 
