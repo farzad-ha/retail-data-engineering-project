@@ -2,7 +2,7 @@
 
 An end-to-end retail data engineering project built using **Azure Data Factory, Azure Data Lake Storage Gen2, Azure Databricks, PySpark, SQL and Delta Lake**.
 
-The project uses the Olist retail dataset to implement a Bronze, Silver and Gold Medallion architecture, covering dynamic data ingestion, data quality engineering, transformation pipelines, dimensional modelling and analytical data preparation.
+The project uses the Olist retail dataset to implement a Bronze, Silver and Gold Medallion architecture, covering dynamic data ingestion, data quality engineering, transformation pipelines, Incremental data ingestion and processing using Auto Loader, merge, update and a scheduled deletion handling at midnight. Kimball dimensional modelling, Star schema and analytical data preparation.
 
 ---
 
